@@ -1,0 +1,9 @@
+[submodule "modules/sdl-gpu"]
+	path = modules/sdl-gpu
+	url = git@github.com:grimfang4/sdl-gpu.git
+[submodule "modules/sdl"]
+	path = modules/sdl
+	url = git@github.com:libsdl-org/SDL.git
+[submodule "modules/imgui"]
+	path = modules/imgui
+	url = git@github.com:ocornut/imgui.git
