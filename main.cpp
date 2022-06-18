@@ -2,6 +2,7 @@
 
 #include <imgui/imgui.h>
 #include <imgui/backends/imgui_impl_sdl.h>
+#include <imgui/backends/imgui_impl_opengl3.h>
 
 #include <SDL.h>
 #include <SDL_gpu.h>
@@ -19,12 +20,10 @@ struct Window final {
 
 Window w;
 
-class NineSliced final
-{
+class NineSliced final {
 public:
-    NineSliced(uint32_t left, uint32_t right, uint32_t top, uint32_t bottom, const char* filename) {
-        image = GPU_LoadImage(filename);
-
+    NineSliced(uint32_t left, uint32_t right, uint32_t top, uint32_t bottom, const GPU_Image* _image)
+        : image(_image) {
         // Todo: asserts on left < right < image->w
         //                  top < bottom < image->h
 
@@ -62,9 +61,9 @@ public:
                     {    w,    t, 1.0f,  t_v,    1.0f, 1.0f, 1.0f, 1.0f },
 
                     { 0.0f,    b, 0.0f,  b_v,    1.0f, 1.0f, 1.0f, 1.0f },
-                    {    l,    b,  l_u,  b_v,    1.0f, 1.0f, 1.0f, 1.0f },
-                    {    r,    b,  r_u,  b_v,    1.0f, 1.0f, 1.0f, 1.0f },
-                    {    w,    b, 1.0f,  b_v,    1.0f, 1.0f, 1.0f, 1.0f },
+                    {    l,    b,  l_u,  b_v,    1.0f, 1.0f, 1.0f, 0.5f },
+                    {    r,    b,  r_u,  b_v,    1.0f, 1.0f, 1.0f, 0.5f },
+                    {    w,    b, 1.0f,  b_v,    1.0f, 1.0f, 1.0f, 0.5f },
 
                     { 0.0f,    h, 0.0f, 1.0f,    1.0f, 1.0f, 1.0f, 1.0f },
                     {    l,    h,  l_u, 1.0f,    1.0f, 1.0f, 1.0f, 1.0f },
@@ -90,13 +89,11 @@ public:
         verts[12].y = verts[13].y = verts[14].y = verts[15].y = verts[0].y + height;
     }
 
-    float* get_data() const
-    {
+    float* get_data() const {
         return const_cast<float*>(reinterpret_cast<const float*>(&verts));
     }
 
-    GPU_Image* get_image()
-    {
+    const GPU_Image* get_image() {
         return image;
     }
 
@@ -114,8 +111,19 @@ public:
         }
     }
 
+    void set_color(size_t i, float r, float g, float b, float a) {
+        verts[i].r = r;
+        verts[i].g = g;
+        verts[i].b = b;
+        verts[i].a = a;
+    }
+
+    std::tuple<float, float, float, float> get_color(size_t i) const {
+        return { verts[i].r, verts[i].g, verts[i].b, verts[i].a };
+    }
+
 private:
-    GPU_Image* image;
+    const GPU_Image* image;
 
     float l;
     float r;
@@ -128,8 +136,7 @@ private:
         8, 0xD, 0xC, 8, 9, 0xD, 9, 0xE, 0xD, 9, 0xA, 0xE, 0xA, 0xF, 0xE, 0xA, 0xF, 0xB,
     };
 
-    struct Vertex
-    {
+    struct Vertex {
         float x;
         float y;
         float u;
@@ -143,13 +150,92 @@ private:
     std::array<Vertex, 16> verts;
 };
 
+struct Settings {
+    uint32_t border_x;
+
+    uint32_t left, right, top, bottom, x, y, width, height;
+
+    uint32_t max_width, max_height;
+
+    struct Color {
+        float r = 1.0f, g = 1.0f, b = 1.0f, a = 1.0f;
+    };
+    Color colors[16];
+
+    int32_t selected_vertex = 0;
+
+    GPU_Image* image;
+};
+
+Settings settings;
+
 void render() {
     GPU_Clear(w.target);
 
-    auto n = NineSliced(138, 454, 103, 103, "frame.png");
-    n.set_size(800, 500);
+    auto n = NineSliced(settings.left, settings.right, settings.top, settings.bottom, settings.image);
 
-    GPU_TriangleBatch(n.get_image(), w.target, 16, n.get_data(), 54, n.get_indices(), GPU_BATCH_XY | GPU_BATCH_ST | GPU_BATCH_RGBA);
+    // Settings menu
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+    ImGui::Begin("Menu", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+
+    int32_t lr[2] = { static_cast<int32_t>(settings.left), static_cast<int32_t>(settings.right) };
+    if (ImGui::SliderInt2("Left Right", lr, 0, settings.max_width))
+    {
+        settings.left = lr[0];
+        settings.right = lr[1];
+    }
+
+    int32_t tb[2] = { static_cast<int32_t>(settings.top), static_cast<int32_t>(settings.bottom) };
+    if (ImGui::SliderInt2("Top Bottom", tb, 0, settings.max_height))
+    {
+        settings.top = tb[0];
+        settings.bottom = tb[1];
+    }
+
+    int32_t xy[2] = { static_cast<int32_t>(settings.x), static_cast<int32_t>(settings.y) };
+    if (ImGui::SliderInt2("X Y", xy, 0, 1000))
+    {
+        settings.x = xy[0];
+        settings.y = xy[1];
+    }
+
+    int32_t wh[2] = { static_cast<int32_t>(settings.width), static_cast<int32_t>(settings.height) };
+    if (ImGui::SliderInt2("Width Height", wh, 0, 1000))
+    {
+        settings.width = wh[0];
+        settings.height = wh[1];
+    }
+
+    if (ImGui::InputInt("Vertex num", &settings.selected_vertex))
+    {
+        settings.selected_vertex = std::clamp(settings.selected_vertex, 0, 15);
+    }
+
+    ImGui::SliderFloat4("Vertex Color", reinterpret_cast<float*>(&settings.colors[settings.selected_vertex]), 0.0f, 1.0f);
+
+    ImGui::End();
+
+    GPU_Blit(settings.image, nullptr, w.target, 0.0f, 0.0f);
+    GPU_Line(w.target, settings.border_x, 0.0f, settings.border_x, 2000.0f, { 0, 200, 200, 255 });
+
+    GPU_Line(w.target, settings.left, 0.0f, settings.left, settings.max_height, { 200, 0, 0, 255 });
+    GPU_Line(w.target, settings.right, 0.0f, settings.right, settings.max_height, { 200, 0, 0, 255 });
+    GPU_Line(w.target, 0.0f, settings.top, settings.max_width, settings.top, { 200, 0, 0, 255 });
+    GPU_Line(w.target, 0.0f, settings.bottom, settings.max_width, settings.bottom, { 200, 0, 0, 255 });
+
+    n.set_size(settings.width, settings.height);
+    n.set_pos(settings.border_x + 2 + settings.x, settings.y);
+
+    for(auto i = 0u; i < 16; ++i) {
+        const auto& c = settings.colors[i];
+        n.set_color(i, c.r, c.g, c.b, c.a);
+    }
+    GPU_TriangleBatch(const_cast<GPU_Image*>(n.get_image()), w.target, 16, n.get_data(), 54, n.get_indices(), GPU_BATCH_XY | GPU_BATCH_ST | GPU_BATCH_RGBA);
+
+    ImGui::Render();
+    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
     GPU_Flip(w.target);
 }
@@ -166,32 +252,55 @@ bool main_loop() {
                 return false;
             }
         default:
-            break;
+            ImGui_ImplSDL2_ProcessEvent(&e);
         }
     }
-    SDL_Delay(100);
+    SDL_Delay(10);
     render();
     return true;
 }
 
+void load_image(const char* filename) {
+    settings.image = GPU_LoadImage(filename);
+    settings.max_width = settings.image->w;
+    settings.max_height = settings.image->h;
+    settings.border_x = settings.max_width;
+    ImGui::SetNextWindowPos({ 0.0f, settings.max_height + 40.0f });
+}
+
 int main() {
+    settings.left = 138;
+    settings.right = 454;
+    settings.top = 101;
+    settings.bottom = 102;
+    settings.x = 0;
+    settings.y = 0;
+    settings.width = 500;
+    settings.height = 300;
+
     SDL_Init(SDL_INIT_VIDEO);
 
-    w.target = GPU_Init(800, 600, GPU_DEFAULT_INIT_FLAGS);
+    w.target = GPU_Init(1280, 800, GPU_DEFAULT_INIT_FLAGS);
     if (!w.target) {
         std::cout << GPU_PopErrorCode().details << '\n';
     }
+
+    GPU_SetDefaultAnchor(0, 0);
 
     w.window = SDL_GetWindowFromID(w.target->context->windowID);
 
     ImGui::CreateContext();
     ImGui::GetIO().IniFilename = nullptr;
 
+    ImGui_ImplOpenGL3_Init(nullptr);
     ImGui_ImplSDL2_InitForOpenGL(w.window, w.target->context->context);
+
+    load_image("frame2.png");
 
     while(main_loop());
 
     ImGui_ImplSDL2_Shutdown();
+    ImGui_ImplOpenGL3_Shutdown();
     ImGui::DestroyContext();
     return 0;
 }

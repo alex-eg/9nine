@@ -38,7 +38,8 @@ add_library(imgui STATIC
     modules/imgui/imgui_draw.cpp
     modules/imgui/imgui_tables.cpp
     modules/imgui/imgui_widgets.cpp
-    modules/imgui/backends/imgui_impl_sdl.cpp)
+    modules/imgui/backends/imgui_impl_sdl.cpp
+    modules/imgui/backends/imgui_impl_opengl3.cpp)
 target_include_directories(imgui PRIVATE modules/imgui modules/sdl/include)
 target_compile_options(imgui PRIVATE "-w")
 target_link_libraries(9nine imgui)
